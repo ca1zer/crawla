@@ -21,12 +21,6 @@ export class NicheDetector {
 			followerCount: user.follower_count,
 			tweets: tweets.slice(0, 20).map((t) => ({
 				text: t.text,
-				engagement: {
-					likes: t.favorite_count,
-					retweets: t.retweet_count,
-					replies: t.reply_count,
-					quotes: t.quote_count,
-				},
 			})),
 		};
 

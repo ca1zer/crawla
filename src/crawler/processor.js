@@ -66,21 +66,17 @@ export class Crawler {
 		const { user_id, depth } = item;
 
 		try {
-			if (
-				db.userExists(user_id.toString()) &&
-				!db.isUserStale(user_id.toString(), this.config.refreshHours)
-			) {
-				logger.debug(`Skipping up-to-date user ${user_id}`);
-				return null;
-			}
-
-			// Fetch user details and tweets in parallel
 			const [user, tweets] = await Promise.all([
 				this.api.getUserDetails({ user_id: user_id.toString() }),
 				this.api.getUserTweets({ user_id: user_id.toString() }, 100),
 			]);
 
-			const isInNiche = await this.nicheDetector.isUserInNiche(user, tweets);
+			let isInNiche;
+			if (user.checked_in_niche) {
+				isInNiche = user.is_in_niche;
+			} else {
+				isInNiche = await this.nicheDetector.isUserInNiche(user, tweets);
+			}
 
 			const userData = {
 				...user,
@@ -89,15 +85,12 @@ export class Crawler {
 				followers_crawled: false,
 				bfs_depth: depth,
 				is_in_niche: isInNiche,
+				checked_in_niche: true,
 			};
 
 			db.saveUser(userData);
 
-			// Wait a moment to ensure user is saved before saving tweets
-			await new Promise((resolve) => setTimeout(resolve, 100));
-
-			// Then save tweets if user exists
-			if (tweets && tweets.length > 0 && db.userExists(user_id.toString())) {
+			if (tweets && tweets.length > 0) {
 				db.saveTweets(user_id.toString(), tweets);
 			}
 
