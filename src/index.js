@@ -17,7 +17,7 @@ async function main() {
 		const crawler = new Crawler(config);
 		await crawler.addSeedUsers(usernames);
 
-		await crawler.start();
+		await crawler.start(false, false); // crawlFollowing=true, force=false
 	} catch (error) {
 		logger.error("Application error:", error);
 		process.exit(1);

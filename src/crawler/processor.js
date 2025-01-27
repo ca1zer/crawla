@@ -8,7 +8,7 @@ import { NicheDetector } from "../ai/niche-detector.js";
 export class Crawler {
 	constructor(config) {
 		this.config = config;
-		this.workerPool = new WorkerPool(10);
+		this.workerPool = new WorkerPool(12);
 		this.api = new ApiClient(config.refreshHours);
 		this.nicheDetector = new NicheDetector(config.niche);
 		this.seenUsers = new Set();
@@ -32,12 +32,28 @@ export class Crawler {
 				const userId = user.user_id.toString();
 				if (this.seenUsers.has(userId)) return false;
 				this.seenUsers.add(userId);
-				return !db.userExists(userId);
+				return true; // !db.userExists(userId); // we need to recrawl them anyways, but wont need to refetch the resource
 			})
 			.map((user) => ({
 				user_id: user.user_id.toString(),
+				user,
 				depth,
 			}));
+
+		newItems.forEach(({ user, user_id, depth }) => {
+			if (user.last_updated) return; // user already in the db
+			const userData = {
+				...user,
+				user_id: user_id,
+				last_updated: Date.now(),
+				followers_crawled: false,
+				bfs_depth: depth,
+				is_in_niche: false,
+				checked_in_niche: false,
+			};
+
+			db.saveUser(userData);
+		});
 
 		if (newItems.length > 0) {
 			this.workerPool.addItems(newItems);
@@ -45,17 +61,29 @@ export class Crawler {
 	}
 
 	async addSeedUsers(usernames) {
-		for (const username of usernames) {
-			try {
-				const user = await this.api.getUserDetails({ username });
-				this.addNewUsers([user], 0);
-			} catch (error) {
-				logger.error(`Failed to add seed user ${username}`, error);
+		const batchSize = 6;
+		const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+		for (let i = 0; i < usernames.length; i += batchSize) {
+			const batch = usernames.slice(i, i + batchSize);
+			const promises = batch.map(async (username) => {
+				try {
+					const user = await this.api.getUserDetails({ username });
+					this.addNewUsers([user], 0);
+				} catch (error) {
+					logger.error(`Failed to add seed user ${username}`, error);
+				}
+			});
+
+			await Promise.all(promises);
+
+			if (i + batchSize < usernames.length) {
+				await sleep(1000); // Wait 1 second before next batch
 			}
 		}
 	}
 
-	shouldProcessUser(user, depth) {
+	shouldAddUsersFollowing(user, depth) {
 		return (
 			user.follower_count >= this.config.minFollowers &&
 			depth <= this.config.maxDepth
@@ -63,20 +91,17 @@ export class Crawler {
 	}
 
 	async processUser(item) {
-		const { user_id, depth } = item;
+		const { user_id, depth } = item; // item includes user, but i still want to get it from the db incase an
 
 		try {
 			const [user, tweets] = await Promise.all([
 				this.api.getUserDetails({ user_id: user_id.toString() }),
 				this.api.getUserTweets({ user_id: user_id.toString() }, 100),
 			]);
+			// console.log(user);
+			if (user.checked_in_niche) return user;
 
-			let isInNiche;
-			if (user.checked_in_niche) {
-				isInNiche = user.is_in_niche;
-			} else {
-				isInNiche = await this.nicheDetector.isUserInNiche(user, tweets);
-			}
+			let isInNiche = await this.nicheDetector.isUserInNiche(user, tweets);
 
 			const userData = {
 				...user,
@@ -89,6 +114,10 @@ export class Crawler {
 			};
 
 			db.saveUser(userData);
+			// const newUser = await this.api.getUserDetails({
+			// 	user_id: user_id.toString(),
+			// });
+			// console.log(newUser);
 
 			if (tweets && tweets.length > 0) {
 				db.saveTweets(user_id.toString(), tweets);
@@ -114,7 +143,7 @@ export class Crawler {
 
 			try {
 				this.cleanupSeenUsers();
-				const user = await this.processUser(item);
+				const user = await this.processUser(item); // only does something if checked_in_niche is false
 				usersCrawled++;
 
 				if (usersCrawled % 100 === 0) {
@@ -124,8 +153,7 @@ export class Crawler {
 				if (
 					user &&
 					user.is_in_niche &&
-					this.shouldProcessUser(user, item.depth) &&
-					db.shouldCrawlFollowing(user.user_id)
+					this.shouldAddUsersFollowing(user, item.depth)
 				) {
 					const following = await this.api.getFollowing(user.user_id);
 
@@ -144,11 +172,11 @@ export class Crawler {
 			// Record queue size
 			analytics.recordQueueSize(this.workerPool.getQueueSize());
 			// Log progress
-			logger.info(
-				`Queue size: ${this.workerPool.getQueueSize()}, Processing: ${this.workerPool.getProcessingSize()}, Success rate: ${analytics
-					.getSuccessRate()
-					.toFixed(2)}%`
-			);
+			// logger.info(
+			// 	`Queue size: ${this.workerPool.getQueueSize()}, Processing: ${this.workerPool.getProcessingSize()}, Success rate: ${analytics
+			// 		.getSuccessRate()
+			// 		.toFixed(2)}%`
+			// );
 		};
 
 		await this.workerPool.process([], processUserAndFollowing);

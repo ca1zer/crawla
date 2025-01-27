@@ -26,30 +26,31 @@ export class ApiClient {
 				return cachedUser;
 			}
 		}
-
-		// Fetch from API
+		console.log("User not cached, fetching from API", normalizedIdentifier);
 		const user = await twitter.getUserDetails(normalizedIdentifier);
 		// Ensure user_id is string
 		return { ...user, user_id: user.user_id.toString() };
 	}
 
-	async getFollowing(userId, depth) {
+	async getFollowing(userId, force = false) {
 		userId = userId.toString();
 
 		// Check if we already have this user's following list in DB
-		const cachedFollowingIds = db.getFollowingIds(userId);
-		if (cachedFollowingIds.length > 0) {
-			const followingUsers = [];
-			for (const followingId of cachedFollowingIds) {
-				const user = await this.getUserDetails({
-					user_id: followingId.toString(),
-				});
-				followingUsers.push(user);
+		if (!force) {
+			const cachedFollowingIds = db.getFollowingIds(userId);
+			if (cachedFollowingIds.length > 0) {
+				const followingUsers = [];
+				for (const followingId of cachedFollowingIds) {
+					const user = await this.getUserDetails({
+						user_id: followingId.toString(),
+					});
+					followingUsers.push(user);
+				}
+				return followingUsers;
 			}
-			return followingUsers;
 		}
+		console.log("Following not cached for user ", userId);
 		const normalizedFollowing = await twitter.getFollowing(userId);
-
 		return normalizedFollowing;
 	}
 
@@ -59,6 +60,7 @@ export class ApiClient {
 		if (cachedTweets && cachedTweets.length > 0) {
 			return cachedTweets;
 		}
+		console.log("Tweets not cached for user ", userId);
 		const tweets = await twitter.getUserTweets(identifier, limit);
 		return tweets;
 	}

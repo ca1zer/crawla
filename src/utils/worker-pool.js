@@ -31,7 +31,7 @@ export class WorkerPool {
 				})();
 			}
 
-			await sleep(100);
+			await sleep(30);
 		}
 	}
 

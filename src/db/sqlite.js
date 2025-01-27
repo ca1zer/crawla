@@ -196,11 +196,6 @@ export function markFollowersCrawled(userId) {
 	);
 }
 
-export function shouldCrawlFollowing(userId) {
-	const user = getUser(userId.toString());
-	return user ? !user.followers_crawled : true;
-}
-
 export function getAllUsers() {
 	return db.prepare("SELECT * FROM users").all();
 }
