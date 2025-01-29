@@ -112,7 +112,7 @@ export async function getFollowing(user_id, maxLimit = 2500) {
 		continuation_token = response.continuation_token;
 
 		// Small delay between pagination requests
-		await sleep(1000);
+		await sleep(100);
 	}
 
 	return allFollowing;

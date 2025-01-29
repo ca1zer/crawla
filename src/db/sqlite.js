@@ -213,13 +213,29 @@ export function getUserTweets(userId, limit = 100) {
 	return db
 		.prepare(
 			`
-        SELECT * FROM tweets 
-        WHERE user_id = ? 
-        ORDER BY timestamp DESC 
-        LIMIT ?
-    `
+		SELECT * FROM tweets
+		WHERE user_id = ?
+		ORDER BY timestamp DESC
+		LIMIT ?
+	`
 		)
 		.all(userId.toString(), limit);
+}
+
+/**
+	* Fetches a chunk of users who have not been processed for niche checking (checked_in_niche = 0).
+	* We order by last_updated ascending to process older entries first.
+	*/
+export function getUnprocessedUsers(limit, offset) {
+	const rows = db
+		.prepare(
+			`SELECT * FROM users
+			WHERE checked_in_niche = 0
+			ORDER BY last_updated ASC
+			LIMIT ? OFFSET ?`
+		)
+		.all(limit, offset);
+	return rows || [];
 }
 
 // Close database connection when the application exits

@@ -8,7 +8,7 @@ import { NicheDetector } from "../ai/niche-detector.js";
 export class Crawler {
 	constructor(config) {
 		this.config = config;
-		this.workerPool = new WorkerPool(12);
+		this.workerPool = new WorkerPool(5);
 		this.api = new ApiClient(config.refreshHours);
 		this.nicheDetector = new NicheDetector(config.niche);
 		this.seenUsers = new Set();
@@ -41,7 +41,13 @@ export class Crawler {
 			}));
 
 		newItems.forEach(({ user, user_id, depth }) => {
-			if (user.last_updated) return; // user already in the db
+			if (user.last_updated) {
+				logger.info(
+					`Skipping user ${user.username} as they are already in the db`
+				);
+				return;
+			} // user already in the db
+
 			const userData = {
 				...user,
 				user_id: user_id,
@@ -60,25 +66,26 @@ export class Crawler {
 		}
 	}
 
-	async addSeedUsers(usernames) {
-		const batchSize = 6;
+	async addSeedUsers(user_id) {
+		const batchSize = 200;
 		const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-		for (let i = 0; i < usernames.length; i += batchSize) {
-			const batch = usernames.slice(i, i + batchSize);
-			const promises = batch.map(async (username) => {
+		for (let i = 0; i < user_id.length; i += batchSize) {
+			const batch = user_id.slice(i, i + batchSize);
+			const promises = batch.map(async (user_id) => {
 				try {
-					const user = await this.api.getUserDetails({ username });
+					const user = await this.api.getUserDetails({ user_id });
+					// console.log(user.username, user.user_id);
 					this.addNewUsers([user], 0);
 				} catch (error) {
-					logger.error(`Failed to add seed user ${username}`, error);
+					logger.error(`Failed to add seed user ${user_id}`, error);
 				}
 			});
 
 			await Promise.all(promises);
 
-			if (i + batchSize < usernames.length) {
-				await sleep(1000); // Wait 1 second before next batch
+			if (i + batchSize < user_id.length) {
+				await sleep(1000);
 			}
 		}
 	}

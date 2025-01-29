@@ -26,9 +26,15 @@ export class ApiClient {
 				return cachedUser;
 			}
 		}
-		console.log("User not cached, fetching from API", normalizedIdentifier);
 		const user = await twitter.getUserDetails(normalizedIdentifier);
+
+		// console.log(
+		// 	"User not cached, fetching from API",
+		// 	normalizedIdentifier,
+		// 	user.user_id
+		// );
 		// Ensure user_id is string
+
 		return { ...user, user_id: user.user_id.toString() };
 	}
 
@@ -49,7 +55,6 @@ export class ApiClient {
 				return followingUsers;
 			}
 		}
-		console.log("Following not cached for user ", userId);
 		const normalizedFollowing = await twitter.getFollowing(userId);
 		return normalizedFollowing;
 	}
@@ -60,7 +65,6 @@ export class ApiClient {
 		if (cachedTweets && cachedTweets.length > 0) {
 			return cachedTweets;
 		}
-		console.log("Tweets not cached for user ", userId);
 		const tweets = await twitter.getUserTweets(identifier, limit);
 		return tweets;
 	}
